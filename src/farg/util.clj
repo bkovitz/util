@@ -2,6 +2,7 @@
   "Generally useful utility functions from the FARG library."
   (:refer-clojure :exclude [rand rand-int cond])
   (:require [better-cond.core :refer [cond]]
+            [farg.with-state :refer [with-state]]
             [clojure.core.async :as async :refer [<! <!! >! >!!]]
             [clojure.core.matrix.random]
             [clojure.math.numeric-tower :as math]
@@ -84,6 +85,32 @@
       (throw (IllegalArgumentException.
                "trace-cond must have an even number of arguments"))))
 
+;;; defopts
+
+(defn get-opts
+  "Helper for defopts. Extracts options from opts argument, whether they're
+  keyword arguments, a map, or the same after having been passed from the
+  & opts argument of another function."
+  [opts]
+  (loop [opts opts]
+    (if (= 1 (count opts))
+        (if (map? (first opts))
+            (apply concat (first opts))
+            (recur (first opts)))
+        (seq opts))))
+
+(defmacro defopts
+  "Defines optional arguments in a form that can be passed as keyword arguments
+  or as a map. Works by defining a 'let' macro. See the unit test."
+  [macro-name destructure-map & binding-pairs]
+  (let [dmap-keys (:keys destructure-map), or-map (:or destructure-map)]
+    `(defmacro ~macro-name [opts# & body#]
+      ;TODO Throw exception if opts is not a symbol
+      (let [dmap# {:keys '~dmap-keys :or '~or-map :as opts#}]
+        `(let [~dmap# (get-opts ~opts#)]
+           (let ~'~(vec binding-pairs)
+             ~@body#))))))
+
 ;;; Random numbers
 
 (defn new-seed []
@@ -101,7 +128,7 @@
   `(let [n# ~n
          n# (if (nil? n#) (new-seed) n#)]
      (binding [*rng-seed* n#, *rng* (make-rng n#)]
-     ~@body)))
+       ~@body)))
 
 (defn rand
  ([]
@@ -120,6 +147,15 @@
   (+ (rand-int (inc (- ub lb)))
      lb)))
 
+(defn choose-from [coll]
+  (nth coll (rand-int (count coll)) nil))
+
+(defmacro choose-one [& choices]
+  (if (empty? choices)
+    nil
+    `(case (rand-int ~(count choices))
+       ~@(mapcat #(vector %1 %2) (range) choices))))
+
 ; By Christophe Grand (modified by Ben Kovitz to force v to be a vector)
 ; https://groups.google.com/d/msg/clojure/Kj0b_YhXcos/UahpU7m3iJcJ
 (defn lazy-shuffle [v]
@@ -130,8 +166,23 @@
             (cons (nth v idx)
               (lazy-shuffle (pop (assoc v idx (peek v))))))))))
 
-(defn sample-normal [& {:keys [rng] :or {rng *rng*}}]
-  (first (clojure.core.matrix.random/sample-normal 1 rng)))
+(defn sample-normal [& {:keys [rng mean sd] :or {rng *rng*}}]
+  (with-state [N (first (clojure.core.matrix.random/sample-normal 1 rng))]
+    (when (some? sd)
+      (* sd))
+    (when (some? mean)
+      (+ mean))))
+
+(defn stretch-unit-interval
+  "x must be in unit interval: [0.0, 1.0]. Returns x mapped to corresponding
+  point in interval [lb, ub]."
+  [lb ub x]
+  (+ lb (* x (- ub lb))))
+
+(defn sample-uniform [[lb ub] & {:keys [rng] :or {rng *rng*}}]
+  (->> (clojure.core.matrix.random/sample-uniform 1 rng)
+       first
+       (stretch-unit-interval lb ub)))
 
 ;;; Miscellaneous functions
 
