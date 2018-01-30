@@ -5,7 +5,8 @@
             [clojure.test :refer :all]
             [clojure.pprint :refer :all]
             [farg.util :as util :refer
-              [with-rng-seed almost= sample-normal defopts]]))
+              [with-rng-seed almost= sample-normal defopts piecewise-linear
+               next-id]]))
 
 (defn sample-normals []
   (repeatedly 10 #(sample-normal)))
@@ -86,3 +87,87 @@
          (let [options [:b 2 :a 1]]
            (let-no-or options
              [a b c options])))))
+
+(deftest test-weighted-choice-by
+  (with-rng-seed 1
+    (let [choices [{:item :a, :weight 5.0}
+                   {:item :b, :weight 3.5}
+                   {:item :c, :weight 1.5}]
+          freqs (->> (repeatedly 250 #(util/weighted-choice-by :weight choices))
+                     (map :item)
+                     frequencies
+                     util/normalize-vals)
+          a= (partial almost= 0.1)]
+      (is (a= 0.50 (freqs :a)))
+      (is (a= 0.35 (freqs :b)))
+      (is (a= 0.15 (freqs :c))))))
+
+(deftest test-piecewise-linear
+  (let [f (piecewise-linear 0.0 1.0
+                            1.0 1.0
+                            2.0 2.0
+                            3.0 4.0)]
+    (is (= (f -1.0) 1.0))
+    (is (= (f 0.0) 1.0))
+    (is (= (f 0.6) 1.0))
+    (is (= (f 1.0) 1.0))
+    (is (= (f 1.5) 1.5))
+    (is (= (f 2.0) 2.0))
+    (is (= (f 2.5) 3.0))
+    (is (= (f 3.0) 4.0))
+    (is (= (f 4.0) 6.0))))
+
+(deftest test-piecewise-linear-double-xs
+  (let [f (piecewise-linear 0.0 0.0
+                            0.1 1.0
+                            0.1 2.0
+                            0.2 3.0)]
+    (is (= -10.0 (f -1.0)))
+    (is (=   0.5 (f  0.05)))
+    (is (=   1.0 (f  0.1)))
+    (is (=   2.5 (f  0.15)))))
+
+(deftest test-piecewise-linear-double-xs-first
+  (let [f (piecewise-linear 0.0 0.0
+                            0.0 0.1
+                            1.0 0.2)]
+    (is (almost= 0.0 (f 0.0)))
+    (is (almost= 0.15 (f 0.5)))))
+
+(deftest test-piecewise-linear-no-xs
+  (let [f (piecewise-linear)]
+    (is (= 42.4 (f 42.4)))))
+
+(deftest test-piecewise-linear-one-x
+  (let [f (piecewise-linear 1.0 3.0)]
+    (is (= 2.0 (f 0.0)))
+    (is (= 3.0 (f 1.0)))))
+
+(deftest test-piecewise-linear-cliff-at-end
+  (let [f (piecewise-linear 0.0 0.0, 10.0 1.0, 10.0 0.0)]
+    (is (= 0.5 (f 5.0)))
+    (is (= 1.0 (f 10.0)))
+    (is (= 0.0 (f 10.00000001)))
+    (is (= 0.0 (f 11.00000001)))))
+
+(deftest test-stems-and-suffixes
+  (let [stem-map {}
+        [stem-map plus] (next-id stem-map :plus)
+        [stem-map plus2] (next-id stem-map :plus)
+        [stem-map source10] (next-id stem-map :source10)
+        [stem-map source11] (next-id stem-map :source11)
+        [stem-map source10a] (next-id stem-map :source10)
+        [stem-map plus3] (next-id stem-map :plus)]
+    (is (= :plus plus))
+    (is (= :plus002 plus2))
+    (is (= :source10 source10))
+    (is (= :source11 source11))
+    (is (= :source10a source10a))
+    (is (= :plus003 plus3)))
+    (is (= :source10aa
+           (->> (iterate (fn [[stem-map id]]
+                           (next-id stem-map :source10))
+                         [{} nil])
+                (map second)
+                (drop 28)
+                first))))

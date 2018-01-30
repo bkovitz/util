@@ -1,11 +1,12 @@
 (defproject farg/util "0.1.0-SNAPSHOT"
   :description "Generally useful utility functions from the FARG library."
-  :url "http://example.com/FIXME"
+  :url "https://github.com/bkovitz/util"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[better-cond "2.0.1-SNAPSHOT"]
                  [clj-time "0.14.2"]
                  [com.rpl/specter "1.1.0"]
+                 [farg/with-state "0.0.1-SNAPSHOT"]
                  [incanter "1.5.7"]
                  [org.clojure/clojure "1.9.0"]
                  [org.clojure/math.numeric-tower "0.0.4"]

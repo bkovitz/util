@@ -10,6 +10,18 @@
             [clojure.java.io :as io]
             [clojure.tools.trace :refer [deftrace] :as trace]))
 
+;; Printing
+
+(defmacro with-*out* [filename & body]
+  `(with-open [file# (clojure.java.io/writer ~filename)]
+     (binding [*out* file#]
+       ~@body)))
+
+; Let's try that again
+(defmacro with-*out* [file- & body]
+  `(binding [*out* ~file-]
+     ~@body))
+
 ;; Debugging aids
 
 (defmacro dde
@@ -148,7 +160,9 @@
      lb)))
 
 (defn choose-from [coll]
-  (nth coll (rand-int (count coll)) nil))
+  (nth (seq coll) (rand-int (count coll)) nil))
+
+(def choose choose-from)
 
 (defmacro choose-one [& choices]
   (if (empty? choices)
@@ -166,18 +180,68 @@
             (cons (nth v idx)
               (lazy-shuffle (pop (assoc v idx (peek v))))))))))
 
-(defn sample-normal [& {:keys [rng mean sd] :or {rng *rng*}}]
-  (with-state [N (first (clojure.core.matrix.random/sample-normal 1 rng))]
-    (when (some? sd)
-      (* sd))
-    (when (some? mean)
-      (+ mean))))
+(defn choose-with-replacement
+  [n coll]
+  (take n (repeatedly #(choose coll))))
+
+;TODO UT
+(defn choose-without-replacement
+  "Chooses n items randomly from coll, with uniform probability."
+  [n coll]
+  (take n (lazy-shuffle coll)))
+
+(defn weighted-choice
+  "'choices' must be a seq of two-element vectors each in the format
+  [item weight]. Returns a randomly chosen 'item' with probability weighted by
+  'weight'. Returns nil if 'choices' is empty or the weights sum to zero."
+  [choices]
+  (let [choices (->> choices (filter #(> (second %) 0.0)) vec)
+        total (reduce + (map second choices))
+        r (rand total)
+        n (count choices)]
+    (loop [i 0, a 0.0]
+      (when (< i n)
+        (let [a (+ a (second (choices i)))]
+          (if (<= r a)
+              (first (choices i))
+              (recur (inc i) a)))))))
+
+(defn weighted-choice-by
+  "Like weighted-choice but caller provides a weight function (such as a key)
+  to indicate the weight of each choice."
+  [weight-f choices]
+  (let [weights (map weight-f choices)
+        total (reduce + weights)
+        r (rand total)]
+    (loop [sum 0.0, choices choices, weights weights]
+      (let [sum (+ sum (first weights))]
+        (if (<= r sum)
+            (first choices)
+            (recur sum (next choices) (next weights)))))))
+
+(defn weighted-choice-by-without-replacing
+  "Like weighted-choice-by except ..."
+  [weight-f n choices]
+  (if (<= (count choices) n)
+      choices
+      (loop [choices (set choices), result []]
+        (if (= n (count result))
+            result
+            (let [chosen (weighted-choice-by weight-f choices)]
+              (recur (disj choices chosen) (conj result chosen)))))))
 
 (defn stretch-unit-interval
   "x must be in unit interval: [0.0, 1.0]. Returns x mapped to corresponding
   point in interval [lb, ub]."
   [lb ub x]
   (+ lb (* x (- ub lb))))
+
+(defn sample-normal [& {:keys [rng mean sd] :or {rng *rng*}}]
+  (with-state [N (first (clojure.core.matrix.random/sample-normal 1 rng))]
+    (when (some? sd)
+      (* sd))
+    (when (some? mean)
+      (+ mean))))
 
 (defn sample-uniform [[lb ub] & {:keys [rng] :or {rng *rng*}}]
   (->> (clojure.core.matrix.random/sample-uniform 1 rng)
@@ -193,3 +257,115 @@
   (and (number? a)
        (number? b)
        (< (math/abs (- a b)) tolerance))))
+
+(defn vector-contains? [v x]
+  (some #(= % x) v))
+
+(defn clamp [[lower-bound upper-bound] x]
+  (cond
+    (< x lower-bound)
+      lower-bound
+    (> x upper-bound)
+      upper-bound
+    :else
+      x))
+
+(defn clamp-unit [x] (clamp [0.0 1.0] x))
+
+(defn mround [x]
+  (-> x (* 1000) (math/round) (/ 1000.0)))
+
+(defn midpoint [x0 x1]
+  (/ (+ x0 x1) 2))
+
+(defn distance [[x0 y0] [x1 y1]]
+  (Math/sqrt (+ (Math/pow (- x1 x0) 2.0) (Math/pow (- y1 y0) 2.0))))
+
+(defn normalize
+  [target-sum coll]
+  (if (empty? coll)
+    coll
+    (let [factor (/ target-sum (reduce + coll))]
+      (map #(* factor %) coll))))
+
+(defn normalize-vals
+  "Scales vals of map m so they sum to 1.0."
+  ;TODO Should call normalize
+  [m]
+  (let [total (->> (vals m) (map float) (reduce +))]
+    (if (zero? total)
+        m
+        (zipmap (keys m) (->> (vals m) (map #(/ % total)))))))
+
+(defn piecewise-linear
+  "Returns a piecewise-linear function that passes through the given points."
+  [& points]
+  ;TODO Ensure that xs increase monotonically.
+  (let [points (vec (partition 2 points))]
+    (cond
+      (zero? (count points))
+        identity
+      (= 1 (count points))
+        (let [[[x0 y0]] points
+              offset (- y0 x0)]
+          (fn [x] (+ x offset)))
+      :else
+        (fn [x]
+          (loop [[[x0 y0] & more] points]
+            (let [[[x1 y1]] more]
+              (cond
+                (<= x x1)
+                  (let [Δx (- x1 x0), Δy (- y1 y0)
+                        m (if (zero? Δx) 0.0 (/ Δy Δx))]
+                    (+ y0 (* m (- x x0))))
+                (empty? (rest more))
+                  (let [Δx (- x1 x0), Δy (- y1 y0)]
+                    (if (zero? Δx)
+                        y1
+                        (let [m (/ Δy Δx)]
+                          (+ y0 (* m (- x x0))))))
+                :else
+                  (recur more))))))))
+
+;; Keyword stems and suffixes
+
+(defn namestr [x]
+  (if (or (keyword? x) (symbol? x))
+      (name x)
+      (if (integer? x)
+        (format "%03d" x)
+        (str x))))
+
+(defn make-id [stem suffix]
+  (keyword (str (namestr stem) (namestr suffix))))
+
+(defn bump-letter-suffix [suffix]
+  (apply str
+    (loop [suffix (seq suffix), post-suffix ()]
+      (cond
+        (empty? suffix)
+          (cons \a post-suffix)
+        (= \z (last suffix))
+          (recur (butlast suffix) (cons \a post-suffix))
+        :else
+          `(~@(butlast suffix) 
+            ~(-> (last suffix) int inc char)
+            ~@post-suffix)))))
+
+(defn bump-number-suffix [suffix]
+  (if (= "" suffix) 2 (inc suffix)))
+
+(defn bump-suffix [stem suffix]
+  (let [last-char-of-stem (last (namestr stem))]
+    (if (or (nil? last-char-of-stem) (Character/isDigit last-char-of-stem))
+        (bump-letter-suffix suffix)
+        (bump-number-suffix suffix))))
+      
+(defn next-id
+  "Returns new stem-map and id. Stems that end in a number get alphabetic
+  suffixes for successive ids. All other stems get numeric suffixes for
+  successive ids. The first id is always the stem with no suffix."
+  [stem-map stem]
+  (let [stem-map (update stem-map stem
+                         #(if (nil? %) "" (bump-suffix stem %)))]
+    [stem-map (make-id stem (get stem-map stem))]))
