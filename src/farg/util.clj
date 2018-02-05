@@ -136,11 +136,20 @@
 
 (def ^:dynamic *rng* (make-rng *rng-seed*))
 
-(defmacro with-rng-seed [n & body]
-  `(let [n# ~n
-         n# (if (nil? n#) (new-seed) n#)]
-     (binding [*rng-seed* n#, *rng* (make-rng n#)]
-       ~@body)))
+(defmacro with-rng-seed
+  "n is seed for random-number generator to install at *rng* for duration of
+  body. If n is nil, makes a new seed based on the time.  Either way, stores
+  the seed at *rng-seed* If n is :continue, leaves *rng* and *rng-seed*
+  unchanged."
+  [n & body]
+  `(letfn [(do-body# [] ~@body)]
+     (let [n# ~n]
+       (cond
+         (= :continue n#)
+           (do-body#)
+         :let [n# (if (nil? n#) (new-seed) n#)]
+         (binding [*rng-seed* n#, *rng* (make-rng n#)]
+           (do-body#))))))
 
 (defn rand
  ([]
@@ -280,6 +289,18 @@
 
 (defn distance [[x0 y0] [x1 y1]]
   (Math/sqrt (+ (Math/pow (- x1 x0) 2.0) (Math/pow (- y1 y0) 2.0))))
+
+(defn average [coll]
+  (if (empty? coll)
+      0.0
+      (/ (reduce + 0.0 coll)
+         (count coll))))
+
+(defn average-or-nil [coll]
+  (if (empty? coll)
+      nil
+      (/ (reduce + 0.0 coll)
+         (count coll))))
 
 (defn normalize
   [target-sum coll]
