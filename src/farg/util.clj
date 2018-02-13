@@ -56,7 +56,7 @@
     (string? expr)
       `(prn ~expr)
     :else
-      `(println '~expr "=>" (str ~expr))))
+      `(println '~expr "=>" (pr-str ~expr))))
 
 (defn- dd- [exprs]
   (cond
@@ -111,17 +111,43 @@
             (recur (first opts)))
         (seq opts))))
 
+(defn as-map
+  "Coerces x to a map."
+  [x]
+  (cond
+    (map? x)
+      x
+    (seqable? x)
+      (cond
+        (empty? x)
+          {}
+        :let [c (count x)]
+        (= 1 c)
+          (recur (first x))
+        (even? c)
+          (apply hash-map x)
+        (throw (IllegalArgumentException.
+                 (str "Can't coerce " x " to map: odd number of elements."))))
+    (throw (IllegalArgumentException. (str "Can't coerce " x " to map.")))))
+
 (defmacro defopts
   "Defines optional arguments in a form that can be passed as keyword arguments
   or as a map. Works by defining a 'let' macro. See the unit test."
   [macro-name destructure-map & binding-pairs]
-  (let [dmap-keys (:keys destructure-map), or-map (:or destructure-map)]
+  (let [binding-pairs (vec binding-pairs)
+        dmap-keys (:keys destructure-map)
+        or-map (:or destructure-map)
+        overrides (->> binding-pairs (take-nth 2) (concat (keys or-map)) vec)
+        kws (->> overrides (map keyword) vec)
+        opts-expr (vec (map vector kws overrides))]
     `(defmacro ~macro-name [opts# & body#]
       ;TODO Throw exception if opts is not a symbol
       (let [dmap# {:keys '~dmap-keys :or '~or-map :as opts#}]
-        `(let [~dmap# (get-opts ~opts#)]
-           (let ~'~(vec binding-pairs)
-             ~@body#))))))
+        `(let [~opts# (as-map ~opts#)
+               ~dmap# ~opts#]
+           (let ~'~binding-pairs
+             (let [~opts# (into ~opts# ~'~opts-expr)]
+               ~@body#)))))))
 
 ;;; Random numbers
 
@@ -390,3 +416,20 @@
   (let [stem-map (update stem-map stem
                          #(if (nil? %) "" (bump-suffix stem %)))]
     [stem-map (make-id stem (get stem-map stem))]))
+
+;; Files
+
+(defn rm-recursively
+  "Based on https://gist.github.com/edw/5128978#gistcomment-2232844
+  by ignorabilis. f can be a filename or a file object, and can refer
+  to a directory or a file. Removes f and any files and subdirectories
+  that it contains."
+ ([f]
+  (rm-recursively f :silently))
+ ([f silently?]
+  (letfn [(rm-f [f]
+            (when (.isDirectory f)
+              (doseq [child-f (.listFiles f)]
+                (rm-f child-f)))
+            (io/delete-file f silently?))]
+    (rm-f (io/file f)))))

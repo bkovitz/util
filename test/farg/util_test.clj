@@ -5,7 +5,7 @@
             [clojure.test :refer :all]
             [clojure.pprint :refer :all]
             [farg.util :as util :refer
-              [with-rng-seed almost= sample-normal defopts piecewise-linear
+              [dd with-rng-seed almost= sample-normal defopts piecewise-linear
                next-id]]))
 
 (defn sample-normals []
@@ -86,7 +86,14 @@
   (is (= [1 2 nil {:a 1 :b 2}]
          (let [options [:b 2 :a 1]]
            (let-no-or options
-             [a b c options])))))
+             [a b c options]))))
+  
+  (let [opts {:new-param 'new}]
+    (let-test-opts opts
+      (is (= 'new (:new-param opts)))
+      ;(is (= 'new new-param)) ;If it's not defined in the defopts, it won't
+                               ;get bound.
+      (is (= {:new-param 'new :iterations 10 :derived 20} opts)))))
 
 (deftest test-weighted-choice-by
   (with-rng-seed 1
