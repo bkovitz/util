@@ -8,7 +8,8 @@
             [clojure.math.numeric-tower :as math]
             [clojure.pprint :refer [pprint]]
             [clojure.java.io :as io]
-            [clojure.tools.trace :refer [deftrace] :as trace]))
+            [clojure.tools.trace :refer [deftrace] :as trace]
+            [incanter.stats :as stats]))
 
 ;; Printing
 
@@ -215,6 +216,37 @@
             (cons (nth v idx)
               (lazy-shuffle (pop (assoc v idx (peek v))))))))))
 
+;TODO UT
+(defn lazy-deterministic-shuffled-indices [seed ub]
+  (let [rng (java.util.Random. seed)]
+    (letfn [(next-int [] (.nextInt rng ub))
+            (lazy [so-far]
+              (lazy-seq
+                (when (< (count so-far) ub)
+                  (let [i (->> (repeatedly next-int)
+                               (filter #(not (contains? so-far %)))
+                               (first))]
+                    (cons i (lazy (conj so-far i)))))))]
+      (lazy #{}))))
+
+;TODO UT
+(defn make-flatten-coords
+  "Returns a function that maps an integer index to a multidimensional
+  coordinate.
+
+  row: A vector of all the numbers in a single dimension.
+
+  dimension: The number of dimensions in the coordinates."
+  [row dimension]
+  (let [row-size (count row)]
+    (fn [index]
+      (loop [index index, coords [], n dimension]
+        (cond
+          (zero? n) coords
+          :let [i (rem index row-size)
+                index (quot index row-size)]
+          (recur index (conj coords (get row i)) (dec n)))))))
+
 (defn choose-with-replacement
   [n coll]
   (take n (repeatedly #(choose coll))))
@@ -282,6 +314,14 @@
   (->> (clojure.core.matrix.random/sample-uniform 1 rng)
        first
        (stretch-unit-interval lb ub)))
+
+(defn sample-poisson [λ]
+  (letfn [(cdf [k] (stats/cdf-poisson k :lambda λ))]
+    (let [r (rand)]
+      (loop [k 0]
+        (if (<= r (cdf k))
+          k
+          (recur (inc k)))))))
 
 ;;; Miscellaneous functions
 
@@ -384,7 +424,7 @@
         (str x))))
 
 (defn make-id [stem suffix]
-  (keyword (str (namestr stem) (namestr suffix))))
+  (keyword (namespace stem) (str (namestr stem) (namestr suffix))))
 
 (defn bump-letter-suffix [suffix]
   (apply str

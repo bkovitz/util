@@ -178,3 +178,10 @@
                 (map second)
                 (drop 28)
                 first))))
+
+(deftest test-stems-qualified-by-namespace
+  (let [stem-map {:farg.util/edge 0}
+        [stem-map edge1] (next-id stem-map :farg.util/edge)
+        [stem-map edge2] (next-id stem-map :farg.util/edge)]
+    (is (= :farg.util/edge001 edge1))
+    (is (= :farg.util/edge002 edge2))))
