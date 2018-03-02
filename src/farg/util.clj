@@ -5,6 +5,7 @@
             [farg.with-state :refer [with-state]]
             [clojure.core.async :as async :refer [<! <!! >! >!!]]
             [clojure.core.matrix.random]
+            [clojure.core.strint :refer [<<]]
             [clojure.math.numeric-tower :as math]
             [clojure.pprint :refer [pprint]]
             [clojure.java.io :as io]
@@ -200,7 +201,14 @@
 
 (def choose choose-from)
 
+;TODO Replace all calls to this with calls to choose-expr
 (defmacro choose-one [& choices]
+  (if (empty? choices)
+    nil
+    `(case (rand-int ~(count choices))
+       ~@(mapcat #(vector %1 %2) (range) choices))))
+
+(defmacro choose-expr [& choices]
   (if (empty? choices)
     nil
     `(case (rand-int ~(count choices))
@@ -215,6 +223,33 @@
           (let [idx (rand-int (count v))]
             (cons (nth v idx)
               (lazy-shuffle (pop (assoc v idx (peek v))))))))))
+
+(defn- weight-choice-i*
+  "Returns randomly chosen index, weighted by the weights. Assumes that there
+  is at least one weight and that there are no zero weights."
+  [weights]
+  (let [total (reduce + weights)
+        r (rand total)
+        n (count weights)]
+    (loop [i 0, a 0.0]
+      (when (< i n)
+        (let [a (+ a (nth weights i))]
+          (if (<= r a)
+            i
+            (recur (inc i) a)))))))
+
+(defn weighted-lazy-shuffle
+  "'choices' is a sequence of [item weight]. Returns a lazy sequence of the
+  items, each consecutive item chosen randomly from the remaining, weighted
+  by 'weight'."
+  [choices]
+  (let [choices (->> choices (filter #(> (second %) 0.0)) vec)]
+    (lazy-seq
+      (when (not (empty? choices))
+        (let [i (weight-choice-i* (map second choices))]
+          (cons (first (nth choices i))
+                (weighted-lazy-shuffle
+                  (pop (assoc choices i (peek choices))))))))))
 
 ;TODO UT
 (defn lazy-deterministic-shuffled-indices [seed ub]
@@ -310,6 +345,8 @@
     (when (some? mean)
       (+ mean))))
 
+(def circle-interval [0.0 (* 2.0 Math/PI)])
+
 (defn sample-uniform [[lb ub] & {:keys [rng] :or {rng *rng*}}]
   (->> (clojure.core.matrix.random/sample-uniform 1 rng)
        first
@@ -356,6 +393,12 @@
 (defn distance [[x0 y0] [x1 y1]]
   (Math/sqrt (+ (Math/pow (- x1 x0) 2.0) (Math/pow (- y1 y0) 2.0))))
 
+(defn polar->rectangular
+ ([r θ]
+  [(* r (Math/cos θ)) (* r (Math/sin θ))])
+ ([[r θ]]
+  (polar->rectangular r θ)))
+
 (defn average [coll]
   (if (empty? coll)
       0.0
@@ -383,6 +426,30 @@
     (if (zero? total)
         m
         (zipmap (keys m) (->> (vals m) (map #(/ % total)))))))
+
+(def empty-dstats ^{:type ::dstats} {:type ::dstats})
+
+(defn dstats
+  "Descriptive statistics for numbers in coll."
+  [coll]
+  (if (empty? coll)
+    (assoc empty-dstats :n 0 :mean 0.0 :sd 0.0 :median 0.0 :min 0.0 :max 0.0)
+    (assoc empty-dstats :n (count coll) :mean (stats/mean coll)
+                        :sd (stats/sd coll) :median (stats/median coll)
+                        :min (apply min coll) :max (apply max coll))))
+
+(defn nf
+  "A number, converted to a string and nicely formatted for most purposes."
+  [x]
+  (cond
+    (nil? x) "nil"
+    (integer? x) (str x)
+    (float? x) (format "%1.3g" x)))
+
+(defmethod print-method ::dstats [v ^java.io.Writer w]
+  (let [{:keys [n mean sd median min max]} v]
+    (.write w (<< "n=~{n} m=~(nf mean) sd=~(nf sd) med=~(nf median)"
+                  " min=~(nf min) max=~(nf max)"))))
 
 (defn piecewise-linear
   "Returns a piecewise-linear function that passes through the given points."

@@ -109,6 +109,19 @@
       (is (a= 0.35 (freqs :b)))
       (is (a= 0.15 (freqs :c))))))
 
+(deftest test-weighted-lazy-shuffle
+  (with-rng-seed 1
+    (let [choices [[:a 1] [:b 2] [:c 4] [:d 8]]
+          firsts (repeatedly 200 #(first (util/weighted-lazy-shuffle choices)))
+          {:keys [a b c d]} (frequencies firsts)]
+      (is (<= 1.5 (/ b a) 2.5))
+      (is (<= 1.5 (/ c b) 2.5))
+      (is (<= 1.5 (/ d c) 2.5))
+      (let [wholes (repeatedly 200 #(util/weighted-lazy-shuffle choices))
+            freqs (frequencies (map #(.indexOf % :a) wholes))]
+        (is (every? #(= 4 (count %)) wholes))
+        (is (> (get freqs 3) (get freqs 2) (get freqs 1) (get freqs 0)))))))
+
 (deftest test-piecewise-linear
   (let [f (piecewise-linear 0.0 1.0
                             1.0 1.0
