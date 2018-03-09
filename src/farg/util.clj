@@ -362,6 +362,11 @@
 
 ;;; Miscellaneous functions
 
+;TODO UT
+;By 象嘉道, from https://stackoverflow.com/a/32405094/1393162
+(defn find-first [pred coll]
+  (reduce #(when (pred %2) (reduced %2)) nil coll))
+
 (defn almost=
  ([a b]
   (almost= 0.001 a b))
@@ -387,8 +392,13 @@
 (defn mround [x]
   (-> x (* 1000) (math/round) (/ 1000.0)))
 
-(defn midpoint [x0 x1]
+(defn midp [x0 x1]
   (/ (+ x0 x1) 2))
+
+(defn midpoint [p1 p2]
+  (if (vector? p1)
+    (-> (map midp p1 p2) vec)
+    (midp p1 p2)))
 
 (defn distance [[x0 y0] [x1 y1]]
   (Math/sqrt (+ (Math/pow (- x1 x0) 2.0) (Math/pow (- y1 y0) 2.0))))
@@ -426,6 +436,10 @@
     (if (zero? total)
         m
         (zipmap (keys m) (->> (vals m) (map #(/ % total)))))))
+
+;NEXT Write this.
+;(defn bin-counts
+;  [nbins f coll]
 
 (def empty-dstats ^{:type ::dstats} {:type ::dstats})
 
@@ -491,7 +505,12 @@
         (str x))))
 
 (defn make-id [stem suffix]
-  (keyword (namespace stem) (str (namestr stem) (namestr suffix))))
+  (cond
+    (keyword? stem)
+      (keyword (namespace stem) (str (namestr stem) (namestr suffix)))
+    (symbol? stem)
+      (symbol (namespace stem) (str (namestr stem) (namestr suffix)))
+    (str (namestr stem) (namestr suffix))))
 
 (defn bump-letter-suffix [suffix]
   (apply str
