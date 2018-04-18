@@ -367,6 +367,11 @@
 (defn find-first [pred coll]
   (reduce #(when (pred %2) (reduced %2)) nil coll))
 
+(defn remove=
+  "Returns lazy seq of all elements in coll that are not equal to v."
+  [v coll]
+  (remove #(= v %) coll))
+
 (defn almost=
  ([a b]
   (almost= 0.001 a b))
@@ -377,6 +382,17 @@
 
 (defn vector-contains? [v x]
   (some #(= % x) v))
+
+;TODO UT
+(defn safe-min
+  "Like clojure.core/min but returns 0.0 if given no arguments and ignores
+  nil arguments."
+  [& args]
+  (cond
+    :let [args (filter some? args)]
+    (empty? args)
+      0.0
+    (apply min args)))
 
 (defn clamp [[lower-bound upper-bound] x]
   (cond
