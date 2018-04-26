@@ -14,7 +14,7 @@
 
 ;; Printing
 
-(defmacro with-*out* [filename & body]
+#_(defmacro with-*out* [filename & body]
   `(with-open [file# (clojure.java.io/writer ~filename)]
      (binding [*out* file#]
        ~@body)))
@@ -58,7 +58,9 @@
     (string? expr)
       `(prn ~expr)
     :else
-      `(println '~expr "=>" (pr-str ~expr))))
+      `(let [v# ~expr
+             v# (if (seq? v#) (doall v#) v#)]
+         (println '~expr "=>" (pr-str v#)))))
 
 (defn- dd- [exprs]
   (cond
@@ -367,6 +369,9 @@
 (defn find-first [pred coll]
   (reduce #(when (pred %2) (reduced %2)) nil coll))
 
+(defn mapvals [f m]
+  (zipmap (keys m) (map f (vals m))))
+
 (defn remove=
   "Returns lazy seq of all elements in coll that are not equal to v."
   [v coll]
@@ -437,14 +442,14 @@
       (/ (reduce + 0.0 coll)
          (count coll))))
 
-(defn normalize
+#_(defn normalize
   [target-sum coll]
   (if (empty? coll)
     coll
     (let [factor (/ target-sum (reduce + coll))]
       (map #(* factor %) coll))))
 
-(defn normalize-vals
+#_(defn normalize-vals
   "Scales vals of map m so they sum to 1.0."
   ;TODO Should call normalize
   [m]
@@ -452,6 +457,45 @@
     (if (zero? total)
         m
         (zipmap (keys m) (->> (vals m) (map #(/ % total)))))))
+
+(defn normalize
+  [target-sum coll]
+  (cond
+    (empty? coll)
+      coll
+    :let [total (reduce + coll)]
+    (zero? total)
+      coll
+    :let [scaling-factor (/ target-sum total)]
+    (= 1.0 scaling-factor)
+      coll
+    (map #(* scaling-factor %) coll)))
+
+;TODO UT arity 2
+(defn normalize-vals
+ ([m]
+  (normalize-vals 1.0 m))
+ ([target-sum m]
+  (zipmap (keys m) (normalize target-sum (vals m)))))
+
+;TODO UT
+(defn scale-down
+  [target-sum coll]
+  (cond
+    (empty? coll)
+      coll
+    :let [total (reduce + coll)]
+    (or (<= total target-sum) (zero? total))
+      coll
+    :let [scaling-factor (/ target-sum total)]
+    (map #(* scaling-factor %) coll)))
+
+;TODO UT
+(defn scale-down-vals
+ ([m]
+  (scale-down-vals 1.0 m))
+ ([target-sum m]
+  (zipmap (keys m) (scale-down target-sum (vals m)))))
 
 ;NEXT Write this.
 ;(defn bin-counts
@@ -475,6 +519,15 @@
     (nil? x) "nil"
     (integer? x) (str x)
     (float? x) (format "%1.3g" x)))
+
+(defn map-str
+  "Like (str m) except the keys are sorted."
+  [m]
+  (str \{
+       (clojure.string/join ", " (->> m
+                                    (sort-by key)
+                                    (map #(str (key %) \space (val %)))))
+       \}))
 
 (defmethod print-method ::dstats [v ^java.io.Writer w]
   (let [{:keys [n mean sd median min max]} v]
