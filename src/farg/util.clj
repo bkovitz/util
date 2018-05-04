@@ -10,6 +10,7 @@
             [clojure.pprint :refer [pprint]]
             [clojure.java.io :as io]
             [clojure.tools.trace :refer [deftrace] :as trace]
+            [com.rpl.specter :as S]
             [incanter.stats :as stats]))
 
 ;; Printing
@@ -399,6 +400,17 @@
       0.0
     (apply min args)))
 
+;TODO UT
+(defn safe-max
+  "Like clojure.core/min but returns 0.0 if given no arguments and ignores
+  nil arguments."
+  [& args]
+  (cond
+    :let [args (filter some? args)]
+    (empty? args)
+      0.0
+    (apply max args)))
+
 (defn clamp [[lower-bound upper-bound] x]
   (cond
     (< x lower-bound)
@@ -412,6 +424,15 @@
 
 (defn mround [x]
   (-> x (* 1000) (math/round) (/ 1000.0)))
+
+(defn mround-all [x]
+  (S/transform (S/walker float?) mround x))
+
+(defn mroundstr-all
+ ([x]
+  (mroundstr-all "%4.3f" x))
+ ([fmt x]
+  (S/transform (S/walker float?) #(format fmt %) x)))
 
 (defn midp [x0 x1]
   (/ (+ x0 x1) 2))
@@ -520,13 +541,18 @@
     (integer? x) (str x)
     (float? x) (format "%1.3g" x)))
 
+(defn non-lazy [x]
+  (if (coll? x) (doall x) x))
+
 (defn map-str
-  "Like (str m) except the keys are sorted."
+  "Like (str m) except the keys are sorted and all floating-point numbers are
+  formatted as strings with three digits after the decimal point."
   [m]
   (str \{
-       (clojure.string/join ", " (->> m
-                                    (sort-by key)
-                                    (map #(str (key %) \space (val %)))))
+       (clojure.string/join ", "
+         (->> (mroundstr-all m)
+              (sort-by key)
+              (map #(print-str (key %) (val %)))))
        \}))
 
 (defmethod print-method ::dstats [v ^java.io.Writer w]
