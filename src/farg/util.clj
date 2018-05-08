@@ -154,7 +154,7 @@
              (let [~opts# (into ~opts# ~'~opts-expr)]
                ~@body#)))))))
 
-;;; Random numbers
+;;; Randomness
 
 (defn new-seed []
   (. System nanoTime))
@@ -365,6 +365,9 @@
 
 ;;; Miscellaneous functions
 
+(defn =sets [xs ys]
+  (= (set xs) (set ys)))
+
 ;TODO UT
 ;By 象嘉道, from https://stackoverflow.com/a/32405094/1393162
 (defn find-first [pred coll]
@@ -462,6 +465,19 @@
       nil
       (/ (reduce + 0.0 coll)
          (count coll))))
+
+(defn make-sigmoid-fn
+  "Returns a logistic function with given center and range, with given
+  slope at (x-center, (/ (+ y-max y-min) 2))."
+  [x-center y-min y-max slope]
+  (let [y-scale (- y-max y-min)
+        y-center (/ (+ y-max y-min)
+                    2)
+        y-offset (- y-center (/ y-scale 2))]
+    (fn [x]
+      (+ (/ y-scale
+            (+ 1.0 (Math/exp (* slope (- x-center x)))))
+         y-offset))))
 
 #_(defn normalize
   [target-sum coll]
