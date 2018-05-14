@@ -177,20 +177,24 @@
         [stem-map source10] (next-id stem-map :source10)
         [stem-map source11] (next-id stem-map :source11)
         [stem-map source10a] (next-id stem-map :source10)
-        [stem-map plus3] (next-id stem-map :plus)]
+        [stem-map plus3] (next-id stem-map :plus)
+        [stem-map four] (next-id stem-map 4)
+        [stem-map foura] (next-id stem-map 4)]
     (is (= :plus plus))
     (is (= :plus002 plus2))
     (is (= :source10 source10))
     (is (= :source11 source11))
     (is (= :source10a source10a))
-    (is (= :plus003 plus3)))
-    (is (= :source10aa
-           (->> (iterate (fn [[stem-map id]]
-                           (next-id stem-map :source10))
-                         [{} nil])
-                (map second)
-                (drop 28)
-                first))))
+    (is (= :plus003 plus3))
+    (is (= 4 four))
+    (is (= "4a" foura)))
+  (is (= :source10aa
+         (->> (iterate (fn [[stem-map id]]
+                         (next-id stem-map :source10))
+                       [{} nil])
+              (map second)
+              (drop 28)
+              first))))
 
 (deftest test-stems-qualified-by-namespace
   (let [stem-map {:farg.util/edge 0}

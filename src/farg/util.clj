@@ -435,7 +435,7 @@
  ([x]
   (mroundstr-all "%4.3f" x))
  ([fmt x]
-  (S/transform (S/walker float?) #(format fmt %) x)))
+  (S/transform (S/codewalker float?) #(format fmt %) x)))
 
 (defn midp [x0 x1]
   (/ (+ x0 x1) 2))
@@ -621,6 +621,10 @@
       (keyword (namespace stem) (str (namestr stem) (namestr suffix)))
     (symbol? stem)
       (symbol (namespace stem) (str (namestr stem) (namestr suffix)))
+    (number? stem)
+      (if (empty? suffix)
+        stem
+        (str stem suffix))
     (str (namestr stem) (namestr suffix))))
 
 (defn bump-letter-suffix [suffix]
