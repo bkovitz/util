@@ -368,6 +368,12 @@
 (defn =sets [xs ys]
   (= (set xs) (set ys)))
 
+(defn =msets
+  "Equal as multisets?"
+  [xs ys]
+  (and (= (count xs) (count ys))
+       (= (set xs) (set ys))))
+
 ;TODO UT
 ;By 象嘉道, from https://stackoverflow.com/a/32405094/1393162
 (defn find-first [pred coll]
