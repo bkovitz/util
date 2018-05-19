@@ -398,6 +398,26 @@
 (defn vector-contains? [v x]
   (some #(= % x) v))
 
+(defn safe-derive [h child parent]
+  (if (isa? h child parent)
+    h
+    (derive h child parent)))
+
+(defn inheritance-seq
+  "Returns lazy seq of tag and ancestors of tag sorted topologically so that
+  items higher in the hierarchy always appear before items that derive from
+  them. Within one level, though, the sequence is arbitrary (though
+  deterministic).  tag always appears last in the result."
+  [hierarchy tag]
+  (distinct
+    (loop [to-go (seq (parents hierarchy tag)), result (into (list tag) to-go)]
+      (cond
+        (empty? to-go)
+          result
+        :let [tag (first to-go), ps (parents hierarchy tag)]
+        (recur (concat (rest to-go) ps)
+               (into result ps))))))
+
 ;TODO UT
 (defn safe-min
   "Like clojure.core/min but returns 0.0 if given no arguments and ignores

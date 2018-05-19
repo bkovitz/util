@@ -6,7 +6,8 @@
             [clojure.pprint :refer :all]
             [farg.util :as util :refer
               [dd with-rng-seed almost= sample-normal defopts piecewise-linear
-               next-id]]))
+               next-id safe-derive]]
+            [farg.with-state :refer [with-state]]))
 
 (defn sample-normals []
   (repeatedly 10 #(sample-normal)))
@@ -202,3 +203,37 @@
         [stem-map edge2] (next-id stem-map :farg.util/edge)]
     (is (= :farg.util/edge001 edge1))
     (is (= :farg.util/edge002 edge2))))
+
+(deftest test-inheritance-seq1
+  (let [h (with-state [h (make-hierarchy)]
+            (derive :grandma :great-grandparent)
+            (derive :ma :grandma)
+            (derive :pa :grandma)
+            (derive :child :ma)
+            (derive :child :other-parent))
+        iseq (vec (util/inheritance-seq h :child))
+        ma (.indexOf iseq :ma)
+        pa (.indexOf iseq :pa)
+        grandma (.indexOf iseq :grandma)
+        great-grandparent (.indexOf iseq :great-grandparent)
+        other-parent (.indexOf iseq :other-parent)
+        child (.indexOf iseq :child)]
+    (is (= child (dec (count iseq))))
+    (is (< ma child))
+    (is (< grandma ma))
+    (is (= pa -1))
+    (is (< great-grandparent grandma))
+    (is (< grandma other-parent))))
+
+(deftest test-inheritance-seq2
+  (let [h (with-state [h (make-hierarchy)]
+            (safe-derive :g1 :g0)
+            (safe-derive :g2 :g1)
+            (safe-derive :g3 :g2)
+            (safe-derive :g4 :g3)
+            (safe-derive :g5 :g4)
+            (safe-derive :g6 :g5)
+            (safe-derive :child :g6)
+            (safe-derive :child :g2))]
+    (is (= [:g0 :g1 :g2 :g3 :g4 :g5 :g6 :child]
+           (util/inheritance-seq h :child)))))
